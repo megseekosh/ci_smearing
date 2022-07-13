@@ -1,0 +1,293 @@
+---
+title: "Effects of spectral smearing on speech understanding and masking release in simulated bilateral cochlear implants"
+author: ""
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  bookdown::pdf_document2:
+    keep_tex: true
+indent: true
+toc: false
+header-includes:
+ \usepackage{float}
+ \floatplacement{figure}{H}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning=FALSE,error=FALSE,message=FALSE)
+```
+
+```{r,include=FALSE}
+library('tidyverse')
+library('ggplot2')
+library('bookdown')
+library('lmerTest')
+library('stargazer')
+library('kableExtra')
+library('lme4')
+library('jtools')
+```
+
+```{r, read in data}
+d <- read.csv('smearing_data.csv')  %>%
+  filter(channel_interact=='L48R12' | channel_interact=='L12R12') # we only want smearing results, not results from
+                                                                  # different vocoders (sine v noise)
+```
+
+```{r, calculate SRM}
+srm <- d %>%
+  group_by(Participant,channel_interact,mask_ear) %>%
+  summarize(mean=mean(SRT)) %>%
+  group_by(Participant,channel_interact) %>%
+  arrange(desc(mask_ear)) %>%
+  mutate(SRM=mean[1] - mean[2]) %>%
+  mutate(Participant=as.factor(Participant))
+
+same_interact <- srm %>%
+  ungroup() %>%
+  filter(channel_interact=='L12R12') %>%
+  distinct(Participant, .keep_all = T) 
+
+dif_interact <- srm %>%
+  ungroup() %>%
+  filter(channel_interact=='L48R12') %>%
+  distinct(Participant, .keep_all = T)
+```
+
+```{r, fit srt model,results="hide"}
+base_srt <- d %>%
+  lmer(SRT~ + (1|Participant), data=.) 
+
+channel <- d %>%
+  lmer(SRT~channel_interact + (1|Participant), data=.) 
+
+anova(base_srt,channel) # improves
+
+mask <- d %>%
+ mutate(mask_ear=relevel(factor(mask_ear),ref="diotic")) %>%  
+ lme4::lmer(SRT~mask_ear + channel_interact + (1|Participant), data=.) 
+
+anova(channel,mask) # improves and lowest AIC
+
+srt_interact <- d %>%
+  lmer(SRT~channel_interact*mask_ear + (1|Participant), data=.) 
+
+anova(mask,srt_interact) # doesn't improve 
+
+# prepare model for table 
+mask_sum <- d %>%
+ mutate(mask_ear=relevel(factor(mask_ear),ref="diotic")) %>%  
+ lmer(SRT~mask_ear + channel_interact + (1|Participant), data=.) %>%
+ summ(.)
+
+`p-value` <- c('<.001','<.001','<.001')
+srt_sum <- round(mask_sum$coeftable,2) %>% 
+  as.data.frame(.) %>%
+  `rownames<-`(.,c("Intercept", "Masker: dichotic", "Channel interaction: L48R12")) %>%
+  select(-p) %>%
+  cbind(`p-value`) %>%
+  rename(t.val.=`t val.`)
+```
+
+```{r, fit srm model,results="hide"}
+base_srm <- srm %>%
+  lmer(SRM~ + (1|Participant), data=.) 
+
+channel_srm <- srm %>%
+  lmer(SRM~channel_interact + (1|Participant), data=.) 
+
+anova(base_srm,channel_srm) # improves
+
+# prepare model for table
+channel_srm <- srm %>%
+ mutate(channel_interact=as.factor(channel_interact),
+        channel_interact=relevel(channel_interact,ref="L48R12")) %>%  
+ lmer(SRM~channel_interact + (1|Participant), data=.) %>%
+ summ(.)
+
+`p-value` <- c('<.001','<.001')
+srm_sum <- round(channel_srm$coeftable,2) %>% 
+  as.data.frame(.) %>%
+  `rownames<-`(.,c("Intercept", "Channel interaction: L12R12")) %>%
+  select(-p) %>%
+  cbind(`p-value`) %>%
+  rename(t.val.=`t val.`)
+```
+
+[NOTE: I only have data from the L12R12 and L48R12 conditions; I'm missing L48R48 but can easily incorporate it into the results once I receive it. There are some conditions like SV-NV, which I assume indicate sine-vocoded and noise-vocoded, that were included with the data you sent. However, since those conditions weren't part of the study description, and only a few participants had SRTs for them, I did not incorporate them into the analysis (although I easily can).]
+
+[NOTE: Some of the figures are redundant, so we can choose which ones we'd actually like to include in the paper.]
+
+# Results 
+
+We first report descriptive statistics and multilevel modeling on the SRTs in each listening condition followed by the SRM results. All results and modeling were conducted in the RStudio computing environment (v. 2022.07.0) using the lme4 and lmerTest packages for modeling and ggplot2 for graphics (Bates et al., 2015; Kuznetsova, et al., 2017; Wickham, 2016).
+
+## SRT results
+
+Unsurprisingly, SRTs were higher for diotic than dichotic masker presentation conditions (Figure \@ref(fig:mask-ear-fig) and Table \@ref(tab:srt-descrip-tbl)). SRTs were also higher for the binaural broad channel interaction condition (L12R12) than the monaural broad-limited condition (L48R12) (Figure \@ref(fig:srt-ind)), suggesting a negative impact of increased channel interaction upon SRTs. The beneficial effect of the dichotic masker condition was consistent across the channel interaction conditions.
+
+```{r,mask-ear-fig, fig.cap="Speech recognition thresholds (SRTs) by listening condition. Smaller SRTs indicate better recognition of test material (i.e. at more challenging signal to noise ratios). Colored points represent individual listener responses; points are horizontally jittered for readability. Boxes indicate interquartile range and whiskers 1.5 x the interquartile range in each direction. Black horizontal lines indicate the median and notches 95% confidence intervals surrounding the median."}
+d %>%
+ggplot(., aes(x=mask_ear, y=SRT,fill=mask_ear)) + 
+    geom_jitter(aes(color=mask_ear),shape=16, size=1.5, position=position_jitter(0.2),alpha=.45) + 
+    geom_boxplot(outlier.shape = NA, notch=TRUE,size=1, width=0.4,position=position_dodge(.6),alpha=.8) +
+  scale_color_manual(values=c("brown3", "dodgerblue3")) +
+  scale_fill_manual(values=c("brown3", "dodgerblue3")) +
+  labs(x="Masking condition",y="SRTs (dB)") +
+  guides(alpha="none", fill = "none",color="none") +
+  scale_y_reverse() +
+  coord_fixed(ratio = .06) +
+  theme(legend.position = c(.8, .8),
+        axis.ticks = element_blank(),
+        legend.title=element_text(face="bold", size=13),
+        legend.text=element_text(face="bold", size=9),
+        axis.text = element_text(face ='bold', size=12),
+        axis.title = element_text(face ='bold', size=16),
+        panel.grid.major.x = element_blank()) 
+```
+
+```{r,srt-descrip-tbl}
+no_interact_tbl <- d %>%
+ group_by(mask_ear) %>%
+ filter(SRT!='NA') %>%
+ summarize(mean = mean(SRT),
+           sd=sd(SRT),
+           min=min(SRT),
+           max=max(SRT)) %>%
+ mutate_at(vars(-mask_ear), funs(round(., 2))) %>%
+ mutate(Combined=paste(mean,"(",sd,")",min,"-",max,sep = "")) %>%
+ select(mask_ear,Combined)
+
+interact_tbl <- d %>%
+ group_by(mask_ear,channel_interact) %>%
+ filter(SRT!='NA') %>%
+ summarize(mean = mean(SRT),
+           sd=sd(SRT),
+           min=min(SRT),
+           max=max(SRT)) %>%
+ mutate_at(vars(-channel_interact,-mask_ear), funs(round(., 2))) %>%
+ mutate(stat=paste(mean,"(",sd,")",min,"-",max,sep = "")) %>%
+ select(channel_interact,mask_ear,stat) %>%
+ spread("channel_interact","stat") %>%
+ merge(., no_interact_tbl, by="mask_ear") %>%
+ relocate(mask_ear,Combined)
+
+kable(interact_tbl, caption = 'Descriptive statistics of SRTs (dB) by listening condition: Mean (SD) range.', 
+      booktabs=T, 
+      row.names = FALSE, 
+      col.names = c("Masker \n presentation", "Combined channel \n interaction conditions", "Binaural broad", "L limited,\n R broad")) %>%
+  kable_styling(full_width = F) %>%
+  column_spec(1:4, width = "10em") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+```{r, srt-ind, fig.cap="SRTs by channel interaction condition. Colored points represent individual listener responses; gray lines connect listener-level SRTs across masking conditions. Boxes indicate interquartile range and whiskers 1.5 x the interquartile range in each direction. Black horizontal lines indicate the median."}
+
+srm %>%
+  mutate(Participant=as.factor(Participant)) %>%
+  mutate(channel_interact=recode(channel_interact,"L12R12"="Binaural broad \n channel interaction","L48R12"="L limited channel \n interaction, R broad")) %>%
+ggplot(., aes(x=mask_ear, y=mean,alpha=channel_interact)) + 
+    geom_point(aes(fill=mask_ear,shape=mask_ear,group=Participant,color=mask_ear),
+                size=2.5, position=position_jitter(0.02),alpha=.8) + 
+    geom_line(aes(group = Participant), size = .55, alpha = 0.7,color="gray49") + 
+    geom_boxplot(aes(fill=mask_ear),notch=FALSE,size=1, outlier.shape = NA,
+                 width=0.8,position=position_dodge(.6),alpha=.65) +
+  facet_wrap(~channel_interact) +
+  scale_color_manual(values=c("brown3", "dodgerblue3")) +
+  scale_alpha_manual(values=c(.5,.9)) +
+  scale_fill_manual(values=c("brown3", "dodgerblue3")) +
+  labs(x="Masking condition",y="SRTs (dB)") +
+  guides(alpha="none", fill = "none",color="none",shape="none") +
+  coord_fixed(ratio = .10) +
+  scale_y_reverse() +
+  theme(legend.position = c(.8, .8),
+        axis.ticks = element_blank(),
+        legend.title=element_text(face="bold", size=13),
+        legend.text=element_text(face="bold", size=9),
+        axis.text = element_text(face ='bold', size=12),
+        axis.title = element_text(face ='bold', size=16),
+        panel.grid.major.x = element_blank(),
+        strip.text.x = element_text(face = "bold",size=13),
+        strip.background = element_rect(fill = "gray60", size = 1)) 
+```
+
+To complement description of these raw data, we additionally fit a linear mixed effects model to predict the effect of listening condition upon SRTs. The significance of potential model parameters was determined via comparing model log-likelihood values and AIC estimates. Categorical predictor variables were contrast-coded to assist in model interpretation. To account for individual variability and correlation stemming from participant-level effects, we included random intercepts by participant; all fixed effects were added step-wise to this baseline, random effect-only model. 
+
+Best model fit included the fixed effects of masker presentation (diotic vs. dichotic) and channel interaction (binaural broad vs. monaural narrow and broad), but not their interaction (see Table \@ref(tab:srt-model-sum) for summary). The lack of an interaction suggests that the benefit of dichotic > diotic is consistent in both channel interaction conditions. Interpretation of model coefficients indicates a SRT improvement of `r srt_sum$Est.[2]` dB in the dichotic over diotic conditions (t=`r srt_sum$t.val.[2]`, p<.001) and improvement of `r srt_sum$Est.[3]` dB in the monaural limited-broad channel interaction over binaural broad channel interaction conditions (t=`r srt_sum$t.val.[3]`, p<.001). Furthermore, the significant effect of masker presentation, without an interaction, indicates significant SRM in both channel interaction conditions.
+
+```{r, srt-model-sum}
+kable(srt_sum, caption = 'Model predicting the effect of listening condition upon SRTs.', 
+      booktabs=T) %>% 
+  kable_styling(full_width = F) %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+## SRM results
+
+To further evaluate the effect of masker presentation, we evaluated a second outcome variable: SRM, or the difference between the average SRT between diotic and dichotic masker conditions. Here, a higher value indicates greater release from masking or the listener benefiting more from the dichotic listening condition during listening. 
+
+As previously mentioned, significant SRM was found for both channel interaction conditions. However, the SRM was greater in the binaural broad channel interaction condition  (M=`r round(mean(same_interact$SRM),2)` (SD=`r round(sd(same_interact$SRM),2)`) than monaural L limited/R broad condition (M=`r round(mean(dif_interact$SRM),2)` (SD=`r round(sd(dif_interact$SRM),2)`)) indicating greater SRM for same than different channel interaction (Figure \@ref(fig:srm)). 
+
+```{r, srm, fig.cap="SRM (diotic-dichotic) by channel interaction condition. Higher values indicate greater benefit from dichotic over diotic listening conditions. Points represent individual listener responses; gray lines connect listener-level SRM values across channel interaction conditions. Boxes indicate interquartile range and whiskers 1.5 x the interquartile range in each direction. Black horizontal lines indicate the median and notches 95% confidence intervals surrounding the median."}
+
+srm %>%
+  mutate(Participant=as.factor(Participant)) %>%
+  mutate(channel_interact=recode(channel_interact,"L12R12"="Binaural \n broad","L48R12"="L limited,\n R broad")) %>%
+  distinct(channel_interact,Participant, .keep_all = T) %>%
+ggplot(., aes(x=channel_interact, y=SRM, alpha=channel_interact)) + 
+    geom_point(aes(fill=channel_interact,shape=channel_interact,group=Participant,color=channel_interact),
+                size=2.5, alpha=1,position=position_jitter(0.02)) + 
+    geom_line(aes(group = Participant), size = .55, alpha = 0.7,color="gray49") + 
+    geom_boxplot(aes(fill=channel_interact),notch=TRUE,size=1, outlier.shape = NA,
+                 width=0.6,position=position_dodge(.6),alpha=.7) +
+  scale_color_manual(values=c("gray65", "gray25")) +
+ # scale_alpha_manual(values=c(.5,.9)) +
+  scale_fill_manual(values=c("gray65", "gray25")) +
+  labs(x="Channel interaction condition",y="SRM (dB)") +
+  guides(alpha="none", fill = "none",color="none",shape="none") +
+  coord_fixed(ratio = .10) +
+  theme(legend.position = c(.8, .8),
+        axis.ticks = element_blank(),
+        legend.title=element_text(face="bold", size=13),
+        legend.text=element_text(face="bold", size=9),
+        axis.text = element_text(face ='bold', size=12),
+        axis.title = element_text(face ='bold', size=16),
+        panel.grid.major.x = element_blank(),
+        strip.text.x = element_text(face = "bold",size=13),
+        strip.background = element_rect(fill = "gray60", size = 1)) 
+```
+
+To further evaluate these results, we fit another linear mixed effects model, controlling for participant-level effects in the random effect structure (random intercepts), to predict the effect of channel interaction condition upon SRM (see Table \@ref(tab:srm-model-summary) for model summary). Channel interaction condition improved upon a baseline, random effects-only model. Model coefficients show a `r srm_sum$Est.[2]` dB SRM benefit for the same-interaction condition (binaural broad) over the different-interaction condition (monaural broad and limited) (t=`r srm_sum$t.val.[2]`, p<.001), suggesting that the degree of channel interaction may not interfere greatly with SRM. 
+
+```{r, srm-model-summary}
+kable(srm_sum, caption = 'Model predicting the effect of channel interaction condition upon SRM.', 
+      booktabs=T) %>% 
+  kable_styling(full_width = F) %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+# Extra Figures
+
+```{r,interact-plot, fig.cap="Speech recognition thresholds by listening condition and degree of channel interaction. Colored points represent individual listener responses; points are horizontally jittered for readability. Boxes indicate interquartile range and whiskers 1.5 x the interquartile range in each direction. Black horizontal lines indicate the median and notches 95% confidence intervals surrounding the median."}
+d %>%
+  mutate(channel_interact=recode(channel_interact,"L12R12"="Binaural \n broad","L48R12"="L limited,\n R broad")) %>%
+  ggplot(., aes(x=channel_interact, y=SRT,fill=mask_ear,alpha=channel_interact)) + 
+    geom_jitter(shape=16, size=1.2, position=position_jitter(0.2),alpha=.6,aes(color=mask_ear)) + 
+    geom_boxplot(outlier.colour="black", size=1, outlier.shape=4,
+             outlier.size=3, notch=TRUE,width=0.6,position=position_dodge(.4)) +
+  scale_color_manual(values=c("brown3", "dodgerblue3")) +
+  scale_fill_manual(values=c("brown3", "dodgerblue3")) +
+  labs(x="Listening condition",y="SRTs (dB)") +
+  scale_alpha_manual(values=c(.5,.9)) +
+  guides(alpha="none", color="none",fill = guide_legend(title = "Masking \n condition")) +
+  scale_y_reverse() +
+  coord_fixed(ratio = .06) +
+  theme(legend.position = c(.8, .3),
+        axis.ticks = element_blank(),
+        legend.title=element_text(face="bold", size=13),
+        legend.text=element_text(face="bold", size=9),
+        axis.text = element_text(face ='bold', size=10),
+        axis.title = element_text(face ='bold', size=16),
+        panel.grid.major.x = element_blank()) 
+```
+
+
