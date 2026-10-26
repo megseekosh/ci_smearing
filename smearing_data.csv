@@ -127,7 +127,7 @@
 9,M,26,0.3,NV-NV,dichotic,1
 9,M,26,-0.7,NV-NV,dichotic,2
 9,M,26,0,SV-SV,dichotic,1
-9,M,26,5.3,SV-SV,dichotic,2
+9,M,26,0.7,SV-SV,dichotic,2
 9,M,26,7,L12R12,dichotic,1
 9,M,26,5.3,L12R12,dichotic,2
 9,M,26,4.7,L48R12,dichotic,1
@@ -169,7 +169,7 @@
 11,F,26,6.2,L12R12,dichotic,2
 11,F,26,2.3,L48R12,dichotic,1
 11,F,26,1,L48R12,dichotic,2
-11,F,26,1,NV-NV,diotic,3
+11,F,26,1.7,NV-NV,diotic,3
 12,F,31,3.3,NV-NV,diotic,1
 12,F,31,3.7,NV-NV,diotic,2
 12,F,31,0,SV-SV,diotic,1
