@@ -7,3 +7,6 @@ Analysis to replicate "Effects of spectral smearing on speech understanding and 
 
 `results.pdf` - generated report of results
 
+Note: 2026 corrected two transcription errors in smearing_data.csv against raw data file (P9 SV-SV dichotic run 2: 5.3→0.7; P11 NV-NV diotic run 3: 1→1.7). See CISimulation-bilateral-Smearing.csv rows 14–15 for the source of the P9 error. The published Table 1 descriptives for L48R48 dichotic were computed from the erroneous value and shift slightly with this fix (M −2.96→−3.09, SD 3.88→3.67, range max 5.3→3.8); model coefficients change by ≤0.08 dB and no conclusions change. The 2022 conference abstract was computed from the correct value. The SRM dataframe in results.Rmd duplicated each participant-condition SRM value (once per masker-ear row), so the published Table 3 model slightly understated standard errors. Estimates and unadjusted statistics were unchanged. 
+
+
